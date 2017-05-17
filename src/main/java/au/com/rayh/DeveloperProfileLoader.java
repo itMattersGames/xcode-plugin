@@ -5,10 +5,10 @@ import hudson.AbortException;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
-import hudson.model.BuildListener;
 import hudson.model.Item;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.remoting.Callable;
 import hudson.remoting.VirtualChannel;
 import hudson.tasks.BuildStepDescriptor;
@@ -25,6 +25,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
+import jenkins.security.MasterToSlaveCallable;
+import jenkins.tasks.SimpleBuildStep;
+import org.jenkinsci.Symbol;
+import org.jenkinsci.remoting.RoleChecker;
 
 /**
  * Installs {@link DeveloperProfile} into the current slave and unlocks its keychain
@@ -34,7 +38,7 @@ import java.util.UUID;
  *
  * @author Kohsuke Kawaguchi
  */
-public class DeveloperProfileLoader extends Builder {
+public class DeveloperProfileLoader extends Builder implements SimpleBuildStep {
     private final String id;
 
     @DataBoundConstructor
@@ -42,14 +46,23 @@ public class DeveloperProfileLoader extends Builder {
         this.id = profileId;
     }
 
+    /**
+     *
+     * @param build
+     * @param workspace
+     * @param launcher
+     * @param listener
+     * @throws InterruptedException
+     * @throws IOException
+     */
     @Override
-    public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
-        DeveloperProfile dp = getProfile(build.getProject());
+    public void perform(Run<?, ?> build, FilePath workspace, Launcher launcher, final TaskListener listener) throws InterruptedException, IOException {
+        DeveloperProfile dp = getProfile(build.getParent());
         if (dp==null)
             throw new AbortException("No Apple developer profile is configured");
 
         // Note: keychain are usualy suffixed with .keychain. If we change we should probably clean up the ones we created
-        String keyChain = "jenkins-"+build.getProject().getFullName().replace('/', '-');
+        String keyChain = "jenkins-"+build.getParent().getFullName().replace('/', '-');
         String keychainPass = UUID.randomUUID().toString();
 
         ArgumentListBuilder args;
@@ -71,7 +84,7 @@ public class DeveloperProfileLoader extends Builder {
         args.add(keyChain);
         invoke(launcher, listener, args, "Failed to unlock keychain");
 
-        final FilePath secret = getSecretDir(build, keychainPass);
+        final FilePath secret = getSecretDir(workspace, keychainPass);
         secret.unzipFrom(new ByteArrayInputStream(dp.getImage()));
 
         // import identities
@@ -94,7 +107,7 @@ public class DeveloperProfileLoader extends Builder {
         }
 
         // copy provisioning profiles
-        VirtualChannel ch = build.getBuiltOn().getChannel();
+        VirtualChannel ch = workspace.toComputer().getNode().getChannel();
         FilePath home = ch.call(new GetHomeDirectory());    // TODO: switch to FilePath.getHomeDirectory(ch) when we can
         FilePath profiles = home.child("Library/MobileDevice/Provisioning Profiles");
         profiles.mkdirs();
@@ -103,11 +116,9 @@ public class DeveloperProfileLoader extends Builder {
             listener.getLogger().println("Installing  "+mp.getName());
             mp.copyTo(profiles.child(mp.getName()));
         }
-
-        return true;
     }
 
-    private ByteArrayOutputStream invoke(Launcher launcher, BuildListener listener, ArgumentListBuilder args, String errorMessage) throws IOException, InterruptedException {
+    private ByteArrayOutputStream invoke(Launcher launcher, TaskListener listener, ArgumentListBuilder args, String errorMessage) throws IOException, InterruptedException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         if (launcher.launch().cmds(args).stdout(output).join()!=0) {
             listener.getLogger().write(output.toByteArray());
@@ -116,8 +127,8 @@ public class DeveloperProfileLoader extends Builder {
         return output;
     }
 
-    private FilePath getSecretDir(AbstractBuild<?, ?> build, String keychainPass) throws IOException, InterruptedException {
-        FilePath secrets = build.getBuiltOn().getRootPath().child("developer-profiles");
+    private FilePath getSecretDir(FilePath workspace, String keychainPass) throws IOException, InterruptedException {
+        FilePath secrets = workspace.toComputer().getNode().getRootPath().child("developer-profiles");
         secrets.mkdirs();
         secrets.chmod(0700);
         return secrets.child(keychainPass);
@@ -139,8 +150,10 @@ public class DeveloperProfileLoader extends Builder {
         return id;
     }
 
+    @Symbol("developerProfileLoader")
     @Extension
     public static class DescriptorImpl extends BuildStepDescriptor<Builder> {
+        
         @Override
         public boolean isApplicable(Class<? extends AbstractProject> jobType) {
             return true;
@@ -162,9 +175,15 @@ public class DeveloperProfileLoader extends Builder {
         }
     }
 
-    private static final class GetHomeDirectory implements Callable<FilePath,IOException> {
+    private static final class GetHomeDirectory extends  MasterToSlaveCallable<FilePath,IOException> {
+        @Override
         public FilePath call() throws IOException {
             return new FilePath(new File(System.getProperty("user.home")));
+        }
+
+        @Override
+        public void checkRoles(RoleChecker rc) throws SecurityException {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
         }
     }
 }
