@@ -76,15 +76,14 @@ public class DeveloperProfile extends BaseStandardCredentials {
      * Obtains the certificates in this developer profile.
      */
     public @Nonnull List<X509Certificate> getCertificates() throws IOException, GeneralSecurityException {
-        ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(getImage()));
-        try {
-            List<X509Certificate> r = new ArrayList<X509Certificate>();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(getImage()))) {
+            List<X509Certificate> r = new ArrayList<>();
 
             ZipEntry ze;
-            while ((ze=zip.getNextEntry())!=null) {
+            while ((ze = zip.getNextEntry()) != null) {
                 if (ze.getName().endsWith(".p12")) {
                     KeyStore ks = KeyStore.getInstance("pkcs12");
-                    ks.load(zip,password.getPlainText().toCharArray());
+                    ks.load(zip, password.getPlainText().toCharArray());
                     Enumeration<String> en = ks.aliases();
                     while (en.hasMoreElements()) {
                         String s = en.nextElement();
@@ -97,8 +96,6 @@ public class DeveloperProfile extends BaseStandardCredentials {
             }
 
             return r;
-        } finally {
-            zip.close();
         }
     }
 

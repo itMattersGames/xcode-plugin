@@ -1,7 +1,7 @@
 <!--
   ~ The MIT License
   ~
-  ~ Copyright (c) 2011 eXo platform
+  ~ Copyright (c) 2011 Ray Yamamoto Hilton
   ~
   ~ Permission is hereby granted, free of charge, to any person obtaining a copy
   ~ of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,13 @@
   -->
 
 <div>
-    <p>Needed if you want to compile for a specific schema instead of a target, or if you want to generate an archive or an IPA.
-        It takes precedence over 'Xcode Configuration' setting and this job 'target' parameter.</p>
+    <p>The value to use for the BUILD_DIR setting. You only need to supply this value if you want the product
+        of the Xcode build to be in a location other than the one specified in project settings and this job 'SYMROOT'
+        parameter.<br/>
+        Supports all macros and also environment and
+        <a href="http://ci.jenkins-ci.org/env-vars.html" target="_blank">build variables</a> from
+        the <a href="https://wiki.jenkins-ci.org/display/JENKINS/Token+Macro+Plugin" target="_blank">Token Macro Plugin</a>.<br/>
+        For example you can use the value :<br/>
+    </p>
+    <pre>${WORKSPACE}/build</pre>
 </div>

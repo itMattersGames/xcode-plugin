@@ -46,6 +46,13 @@ import au.com.rayh.report.TestError;
 import au.com.rayh.report.TestFailure;
 import au.com.rayh.report.TestSuite;
 
+/**
+ * Parse Xcode output and transform into JUnit-style xml test result files.
+ * This utility class creates and manages a FilterOutputStream to parse the Xcode output to capture the
+ * results of ocunit tests. 
+ * @author John Bito &lt;jwbito@gmail.com&gt;
+ */
+
 public class XCodeBuildOutputParser {
 
 	private static DateFormat[] dateFormats = {
@@ -151,13 +158,10 @@ public class XCodeBuildOutputParser {
 
     private void writeTestReport() throws IOException, InterruptedException,
             JAXBException {
-        OutputStream testReportOutputStream = outputForSuite();
-        try {
+        try (OutputStream testReportOutputStream = outputForSuite()) {
             JAXBContext jaxbContext = JAXBContext.newInstance(TestSuite.class);
             Marshaller marshaller = jaxbContext.createMarshaller();
             marshaller.marshal(currentTestSuite, testReportOutputStream);
-        } finally {
-            testReportOutputStream.close();
         }
     }
 
@@ -242,7 +246,7 @@ public class XCodeBuildOutputParser {
 
         m = FAILED_WITH_EXIT_CODE.matcher(line);
         if(m.matches()) {
-            exitCode = Integer.valueOf(m.group(1));
+            exitCode = Integer.parseInt(m.group(1));
             return;
         }
 
